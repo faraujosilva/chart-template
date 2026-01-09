@@ -27,7 +27,7 @@ metadata:
     platform.io/drift-check: enabled
     workspace.app.terraform.io/run-type: apply
 spec:
-  organization: {{ .Values.infrastructure.terraform.organization }}
+  organization: plathub
   name: {{ include "app.workspaceName" . }}-storage
   terraformVersion: {{ .Values.infrastructure.terraform.version | quote }}
   applyMethod: auto
@@ -56,7 +56,7 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "1"
 spec:
-  organization: {{ .Values.infrastructure.organization }}
+  organization: plathub
   
   token:
     secretKeyRef:
