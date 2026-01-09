@@ -12,6 +12,39 @@
 ################################################################################
 ---
 apiVersion: app.terraform.io/v1alpha2
+kind: Workspace
+metadata:
+  name: {{ include "app.fullname" . }}-storage
+  namespace: terraform-operator-system
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+    platform.io/resource-type: storage
+    platform.io/app: {{ include "app.fullname" . }}
+    platform.io/flavor: {{ .Values.infrastructure.storage.flavor }}
+    platform.io/engine: {{ .Values.infrastructure.storage.engine }}
+  annotations:
+    platform.io/provisioned-by: helm-chart
+    platform.io/drift-check: enabled
+    workspace.app.terraform.io/run-type: apply
+spec:
+  organization: {{ .Values.infrastructure.terraform.organization }}
+  name: {{ include "app.workspaceName" . }}-storage
+  terraformVersion: {{ .Values.infrastructure.terraform.version | quote }}
+  applyMethod: auto
+  deletionPolicy: destroy
+  token:
+    secretKeyRef:
+      name: terraformcloud-credentials
+      key: token
+  terraformVariables:
+    - name: app_name
+      value: {{ include "app.fullname" . }}
+
+    - name: flavor
+      value: {{ .Values.infrastructure.storage.flavor }}
+
+---
+apiVersion: app.terraform.io/v1alpha2
 kind: Module
 metadata:
   name: {{ include "app.fullname" . }}-storage
@@ -127,5 +160,5 @@ spec:
   # Workspace configuration
   workspace:
     name: {{ include "app.fullname" . }}-storage
-    terraformVersion: {{ .Values.infrastructure.terraformVersion | default "1.7.0" }}
+    terraformVersion: {{ .Values.infrastructure.terraformVersion | default "1.14.1" }}
 {{- end }}
