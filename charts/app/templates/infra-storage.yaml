@@ -39,7 +39,7 @@ spec:
   # Variáveis Terraform definidas aqui
   terraformVariables:
     - name: region
-      value: us-east-1a
+      value: us-east-1
     - name: bucket
       value: "{{ include "app.fullname" . }}-{{ .Values.infrastructure.storage.flavor }}-bucket"
     
