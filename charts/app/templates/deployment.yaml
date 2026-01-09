@@ -5,7 +5,12 @@ metadata:
   labels:
     {{- include "app.labels" . | nindent 4 }}
   annotations:
+    # Wave 2: Só executa após infraestrutura estar pronta (Wave 0-1 + Hook)
     argocd.argoproj.io/sync-wave: "2"
+    # Opcional: Adiciona informação sobre dependência de infra
+    {{- if and .Values.infrastructure.enabled .Values.infrastructure.storage.enabled }}
+    platform.io/depends-on-infra: "{{ include "app.fullname" . }}-storage"
+    {{- end }}
 spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
