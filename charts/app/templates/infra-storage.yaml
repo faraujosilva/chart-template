@@ -29,6 +29,7 @@ spec:
   terraformVersion: {{ .Values.infrastructure.terraformVersion | default "1.14.1" | quote }}
   applyMethod: auto
   allowDestroyPlan: true
+  deletionPolicy: destroy
   
   token:
     secretKeyRef:
