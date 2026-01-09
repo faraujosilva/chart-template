@@ -46,7 +46,6 @@ spec:
 apiVersion: app.terraform.io/v1alpha2
 kind: Module
 metadata:
-  name: {{ include "app.fullname" . }}-storage
   namespace: terraform-operator-system
   labels:
     {{- include "app.labels" . | nindent 4 }}
