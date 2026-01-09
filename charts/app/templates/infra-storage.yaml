@@ -59,12 +59,11 @@ spec:
   
   token:
     secretKeyRef:
-      name: {{ .Values.infrastructure.tokenSecret | default "hcp-terraform-token" }}
+      name: terraformcloud-credentials
       key: token
 
   module:
     source: "terraform-aws-modules/s3-bucket/aws"
-    version: "~> 4.0"
   
   destroyOnDeletion: true
   
