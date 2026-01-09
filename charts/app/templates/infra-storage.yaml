@@ -4,79 +4,45 @@
 #
 # ABSTRAÇÃO: Dev escolhe apenas FLAVOR
 #   - standard: S3 Standard (acesso frequente)
-#   - economy:  S3 Standard-IA (acesso infrequente)
+#   - economy:  S3 Standard-IA (acesso infrequente)  
 #   - archive:  S3 Glacier (cold storage)
 #
-# Outputs criados automaticamente pelo Operator:
-#   - ConfigMap: <name>-outputs (bucket_name, bucket_arn, etc)
+# Recursos criados:
+#   1. Workspace - Define variáveis e configurações
+#   2. Module - Referencia o módulo Terraform e usa as variáveis do Workspace
 ################################################################################
 ---
 apiVersion: app.terraform.io/v1alpha2
 kind: Workspace
 metadata:
   name: {{ include "app.fullname" . }}-storage
-  namespace: terraform-operator-system
+  namespace: {{ .Values.infrastructure.namespace | default "terraform-operator-system" }}
   labels:
     {{- include "app.labels" . | nindent 4 }}
     platform.io/resource-type: storage
-    platform.io/app: {{ include "app.fullname" . }}
     platform.io/flavor: {{ .Values.infrastructure.storage.flavor }}
   annotations:
-    platform.io/provisioned-by: helm-chart
-    platform.io/drift-check: enabled
-    workspace.app.terraform.io/run-type: apply
+    argocd.argoproj.io/sync-wave: "0"
 spec:
-  organization: plathub
-  name: {{ include "app.workspaceName" . }}-storage
-  terraformVersion: 1.14.1
+  organization: {{ .Values.infrastructure.organization }}
+  name: {{ include "app.fullname" . }}-storage
+  terraformVersion: {{ .Values.infrastructure.terraformVersion | default "1.7.0" | quote }}
   applyMethod: auto
-  deletionPolicy: destroy
+  allowDestroyPlan: true
+  
   token:
     secretKeyRef:
-      name: terraformcloud-credentials
+      name: {{ .Values.infrastructure.tokenSecret | default "terraformcloud-credentials" }}
       key: token
+  
+  # Variáveis Terraform definidas aqui
   terraformVariables:
-    - name: app_name
-      value: {{ include "app.fullname" . }}
-
-    - name: flavor
-      value: {{ .Values.infrastructure.storage.flavor }}
-
----
-apiVersion: app.terraform.io/v1alpha2
-kind: Module
-metadata:
-  name: s3-bucket
-  namespace: terraform-operator-system
-  labels:
-    {{- include "app.labels" . | nindent 4 }}
-    platform.io/resource-type: storage
-    platform.io/flavor: {{ .Values.infrastructure.storage.flavor }}
-  annotations:
-    argocd.argoproj.io/sync-wave: "1"
-spec:
-  organization: plathub
-  
-  token:
-    secretKeyRef:
-      name: terraformcloud-credentials
-      key: token
-
-  module:
-    source: terraform-aws-modules/s3-bucket/aws
-    version: 5.10.0
-  
-  destroyOnDeletion: true
-  
-  variables:
-    # Bucket name
     - name: bucket
       value: "{{ include "app.fullname" . }}-{{ .Values.infrastructure.storage.flavor }}-bucket"
     
     - name: force_destroy
       value: "true"
     
-    # Versioning
     - name: versioning
       hcl: true
       value: |
@@ -85,7 +51,6 @@ spec:
         }
     
     {{- if .Values.infrastructure.storage.encryption | default true }}
-    # Encryption
     - name: server_side_encryption_configuration
       hcl: true
       value: |
@@ -99,7 +64,6 @@ spec:
     {{- end }}
     
     {{- if eq .Values.infrastructure.storage.flavor "economy" }}
-    # Economy: Transition to Standard-IA after 30 days
     - name: lifecycle_rule
       hcl: true
       value: |
@@ -116,7 +80,6 @@ spec:
           }
         ]
     {{- else if eq .Values.infrastructure.storage.flavor "archive" }}
-    # Archive: Transition to Glacier after 7 days
     - name: lifecycle_rule
       hcl: true
       value: |
@@ -134,7 +97,6 @@ spec:
         ]
     {{- end }}
     
-    # Tags
     - name: tags
       hcl: true
       value: |
@@ -144,19 +106,58 @@ spec:
           Flavor    = "{{ .Values.infrastructure.storage.flavor }}"
           ManagedBy = "hcp-terraform-operator"
         }
-
-  # Outputs - serão criados como ConfigMap/Secret automaticamente
+  
+  tags:
+    - platform-managed
+    - storage
+    - {{ .Values.infrastructure.storage.flavor }}
+---
+apiVersion: app.terraform.io/v1alpha2
+kind: Module
+metadata:
+  name: {{ include "app.fullname" . }}-storage
+  namespace: {{ .Values.infrastructure.namespace | default "terraform-operator-system" }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+    platform.io/resource-type: storage
+    platform.io/flavor: {{ .Values.infrastructure.storage.flavor }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  organization: {{ .Values.infrastructure.organization }}
+  
+  token:
+    secretKeyRef:
+      name: {{ .Values.infrastructure.tokenSecret | default "terraformcloud-credentials" }}
+      key: token
+  
+  module:
+    source: "terraform-aws-modules/s3-bucket/aws"
+    version: "4.0.0"
+  
+  destroyOnDeletion: true
+  
+  # Referencia as variáveis definidas no Workspace
+  variables:
+    - name: bucket
+    - name: force_destroy
+    - name: versioning
+    {{- if .Values.infrastructure.storage.encryption | default true }}
+    - name: server_side_encryption_configuration
+    {{- end }}
+    {{- if or (eq .Values.infrastructure.storage.flavor "economy") (eq .Values.infrastructure.storage.flavor "archive") }}
+    - name: lifecycle_rule
+    {{- end }}
+    - name: tags
+  
+  # Outputs mapeados para ConfigMap/Secret
   outputs:
     - name: s3_bucket_id
-      key: STORAGE_NAME
     - name: s3_bucket_arn
-      key: STORAGE_ARN
     - name: s3_bucket_bucket_domain_name
-      key: STORAGE_ENDPOINT
     - name: s3_bucket_region
-      key: STORAGE_REGION
-
-  # Workspace configuration
+  
+  # Referencia o Workspace criado acima
   workspace:
     name: {{ include "app.fullname" . }}-storage
 {{- end }}
