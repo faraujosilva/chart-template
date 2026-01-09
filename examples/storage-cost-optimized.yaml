@@ -1,0 +1,65 @@
+################################################################################
+# DEVELOPER VALUES - Storage Example
+#
+# ✨ SIMPLICIDADE TOTAL - Dev escolhe apenas FLAVOR!
+#
+# Platform Team configura:
+#   - Cloud provider (AWS ou Azure)
+#   - HCP Terraform organization
+#   - Policies e governance
+#
+# DEPLOY:
+#   helm install media-service ./charts/app -n dev \
+#     --values examples/storage-simple.yaml
+#
+################################################################################
+
+app:
+  name: media-service
+  team: media-team
+  costCenter: CC-12345
+
+image:
+  repository: my-registry/media-service
+  tag: "v1.2.0"
+
+replicaCount: 3
+
+container:
+  port: 8080
+  env:
+    - name: APP_ENV
+      value: "production"
+    # STORAGE_ENDPOINT é injetado automaticamente pelo HCP Terraform Operator!
+
+service:
+  type: ClusterIP
+  port: 80
+
+################################################################################
+# INFRASTRUCTURE - Developer escolhe apenas FLAVOR!
+################################################################################
+
+infrastructure:
+  enabled: true
+  
+  # Platform Team configura (via platform-defaults.yaml):
+  # - organization: plathub
+  # - cloudProvider: aws  (ou azure)
+  # - tokenSecret: hcp-terraform-token
+  
+  storage:
+    enabled: true
+    flavor: standard      # standard | premium | economy | archive
+    size: 100Gi          # Documentação apenas
+    encryption: true
+    versioning: true
+
+################################################################################
+# That's it! 🎉
+#
+# Outputs automaticamente injetados na app:
+#   - STORAGE_ENDPOINT (ConfigMap)
+#   - STORAGE_NAME (ConfigMap)
+#   - STORAGE_ACCESS_KEY (Secret - só Azure)
+################################################################################

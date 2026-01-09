@@ -1,71 +1,492 @@
 {{- if and .Values.infrastructure.enabled .Values.infrastructure.storage.enabled }}
+---
+################################################################################
+# HCP Terraform Operator - Storage Provisioning
+#
+# ABSTRAÇÃO TOTAL - Dev escolhe apenas FLAVOR
+# Platform Team decide AWS vs Azure por trás dos panos
+#
+# Outputs do HCP Terraform Operator:
+#   - ConfigMap: <module-name>-outputs (não sensível)
+#   - Secret: <module-name>-outputs (sensível)
+#
+# A aplicação lê via valueFrom no deployment
+################################################################################
 apiVersion: app.terraform.io/v1alpha2
-kind: Workspace
+kind: Module
 metadata:
   name: {{ include "app.fullname" . }}-storage
-  namespace: terraform-operator-system
+  namespace: {{ .Values.infrastructure.namespace | default "terraform-system" }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+    platform.io/resource-type: storage
+    platform.io/flavor: {{ .Values.infrastructure.storage.flavor }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"  # Provisiona antes da app
+spec:
+  organization: {{ .Values.infrastructure.organization }}
+  
+  token:
+    secretKeyRef:
+      name: {{ .Values.infrastructure.tokenSecret | default "hcp-terraform-token" }}
+      key: token
+
+  {{- if eq .Values.infrastructure.cloudProvider "aws" }}
+  #-----------------------------------------------------------------------------
+  # AWS S3 - Módulo Público Terraform Registry
+  #-----------------------------------------------------------------------------
+  module:
+    source: "terraform-aws-modules/s3-bucket/aws"
+    version: "~> 4.0"
+  
+  destroyOnDeletion: true
+  
+  variables:
+    - name: bucket
+      value: {{ include "app.fullname" . }}-{{ .Values.infrastructure.storage.flavor }}-{{ randAlphaNum 8 | lower }}
+    
+    - name: force_destroy
+      value: "true"
+    
+    {{- if eq .Values.infrastructure.storage.flavor "standard" }}
+    # S3 Standard - Acesso frequente
+    - name: versioning
+      hcl: true
+      value: |
+        {
+          enabled = {{ .Values.infrastructure.storage.versioning | default false }}
+        }
+    {{- else if eq .Values.infrastructure.storage.flavor "economy" }}
+    # S3 Standard-IA - Acesso infrequente
+    - name: lifecycle_rule
+      hcl: true
+      value: |
+        [
+          {
+            id      = "transition-to-ia"
+            enabled = true
+            transition = [{
+              days          = 30
+              storage_class = "STANDARD_IA"
+            }]
+          }
+        ]
+    {{- else if eq .Values.infrastructure.storage.flavor "archive" }}
+    # S3 Glacier - Archive
+    - name: lifecycle_rule
+      hcl: true
+      value: |
+        [
+          {
+            id      = "transition-to-glacier"
+            enabled = true
+            transition = [{
+              days          = 7
+              storage_class = "GLACIER"
+            }]
+          }
+        ]
+    {{- end }}
+    
+    {{- if .Values.infrastructure.storage.encryption }}
+    - name: server_side_encryption_configuration
+      hcl: true
+      value: |
+        {
+          rule = {
+            apply_server_side_encryption_by_default = {
+              sse_algorithm = "AES256"
+            }
+          }
+        }
+    {{- end }}
+    
+    - name: tags
+      hcl: true
+      value: |
+        {
+          Name       = {{ include "app.fullname" . | quote }}
+          Team       = {{ .Values.app.team | default "platform" | quote }}
+          Flavor     = {{ .Values.infrastructure.storage.flavor | quote }}
+          ManagedBy  = "hcp-terraform-operator"
+        }
+  
+  {{- else if eq .Values.infrastructure.cloudProvider "azure" }}
+  #-----------------------------------------------------------------------------
+  # Azure Storage Account - Módulo Público Terraform Registry
+  #-----------------------------------------------------------------------------
+  module:
+    source: "Azure/avm-res-storage-storageaccount/azurerm"
+    version: "~> 0.1"
+  
+  destroyOnDeletion: true
+  
+  variables:
+    - name: name
+      value: {{ include "app.fullname" . | lower | replace "-" "" | trunc 20 }}{{ randAlphaNum 4 | lower }}
+    
+    - name: resource_group_name
+      value: {{ .Values.infrastructure.azure.resourceGroup | default "platform-resources" }}
+    
+    - name: location
+      value: {{ .Values.infrastructure.azure.location | default "eastus" }}
+    
+    - name: account_kind
+      value: "StorageV2"
+    
+    {{- if eq .Values.infrastructure.storage.flavor "standard" }}
+    # Hot tier - Acesso frequente
+    - name: account_tier
+      value: "Standard"
+    - name: account_replication_type
+      value: "GRS"
+    - name: access_tier
+      value: "Hot"
+    
+    {{- else if eq .Values.infrastructure.storage.flavor "premium" }}
+    # Premium - Alta performance
+    - name: account_tier
+      value: "Premium"
+    - name: account_replication_type
+      value: "LRS"
+    
+    {{- else if eq .Values.infrastructure.storage.flavor "economy" }}
+    # Cool tier - Acesso infrequente
+    - name: account_tier
+      value: "Standard"
+    - name: account_replication_type
+      value: "LRS"
+    - name: access_tier
+      value: "Cool"
+    
+    {{- else if eq .Values.infrastructure.storage.flavor "archive" }}
+    # Archive tier - Cold storage
+    - name: account_tier
+      value: "Standard"
+    - name: account_replication_type
+      value: "LRS"
+    - name: access_tier
+      value: "Archive"
+    {{- end }}
+    
+    - name: enable_https_traffic_only
+      value: "true"
+    
+    {{- if .Values.infrastructure.storage.encryption }}
+    - name: infrastructure_encryption_enabled
+      value: "true"
+    {{- end }}
+    
+    - name: tags
+      hcl: true
+      value: |
+        {
+          Name       = {{ include "app.fullname" . | quote }}
+          Team       = {{ .Values.app.team | default "platform" | quote }}
+          Flavor     = {{ .Values.infrastructure.storage.flavor | quote }}
+          ManagedBy  = "hcp-terraform-operator"
+        }
+  {{- end }}
+  
+  #-----------------------------------------------------------------------------
+  # Outputs - HCP Terraform Operator cria ConfigMap e Secret automaticamente
+  #
+  # ConfigMap: {{ include "app.fullname" . }}-storage-outputs (não sensível)
+  # Secret: {{ include "app.fullname" . }}-storage-outputs (sensível)
+  #-----------------------------------------------------------------------------
+  outputs:
+    {{- if eq .Values.infrastructure.cloudProvider "aws" }}
+    # AWS S3 Outputs
+    - name: bucket_domain_name
+      key: STORAGE_ENDPOINT
+    - name: bucket_name
+      key: STORAGE_NAME
+    - name: bucket_arn
+      key: STORAGE_ARN
+    - name: bucket_region
+      key: STORAGE_REGION
+    
+    {{- else if eq .Values.infrastructure.cloudProvider "azure" }}
+    # Azure Storage Outputs
+    - name: primary_blob_endpoint
+      key: STORAGE_ENDPOINT
+    - name: storage_account_name
+      key: STORAGE_NAME
+    - name: storage_account_id
+      key: STORAGE_ID
+    - name: primary_access_key
+      key: STORAGE_ACCESS_KEY
+      sensitive: true  # Vai para Secret
+    {{- end }}
+
+  workspace:
+    name: {{ include "app.fullname" . }}-storage
+    terraformVersion: {{ .Values.infrastructure.terraformVersion | default "1.7.0" }}
+    executionMode: {{ .Values.infrastructure.executionMode | default "remote" }}
+{{- end }}
+apiVersion: app.terraform.io/v1alpha2
+kind: Module
+metadata:
+  name: {{ include "app.fullname" . }}-storage
+  namespace: {{ .Values.infrastructure.terraform.namespace | default "terraform-system" }}
   labels:
     {{- include "app.labels" . | nindent 4 }}
     platform.io/resource-type: storage
     platform.io/app: {{ include "app.fullname" . }}
     platform.io/flavor: {{ .Values.infrastructure.storage.flavor }}
+    platform.io/cloud-provider: {{ include "app.cloudProvider" . }}
+    platform.io/managed-by: platform-engineering
+    argocd.argoproj.io/instance: {{ .Release.Name }}
   annotations:
     platform.io/provisioned-by: helm-chart
-    platform.io/drift-check: enabled
+    platform.io/provisioned-at: {{ now | date "2006-01-02T15:04:05Z07:00" | quote }}
+    platform.io/drift-check: "enabled"
+    platform.io/drift-schedule: "0 */1 * * *"  # A cada 1 hora
+    platform.io/cost-optimization: "enabled"
+    platform.io/selected-cloud: {{ include "app.cloudProvider" . | quote }}
+    {{- if .Values.app.team }}
+    platform.io/team: {{ .Values.app.team | quote }}
+    {{- end }}
+    {{- if .Values.app.costCenter }}
+    platform.io/cost-center: {{ .Values.app.costCenter | quote }}
+    {{- end }}
 spec:
+  # Organização do HCP Terraform
   organization: {{ .Values.infrastructure.terraform.organization }}
-  name: {{ include "app.workspaceName" . }}-storage
-  terraformVersion: {{ .Values.infrastructure.terraform.version | quote }}
-  executionMode: remote
-  applyMethod: auto
-
+  
+  # Token para autenticação
   token:
     secretKeyRef:
-      name: terraformcloud-credentials
+      name: {{ .Values.infrastructure.terraform.tokenSecret | default "hcp-terraform-token" }}
       key: token
 
-  # Module source - multi-cloud storage (plataforma decide AWS/Azure)
+  # Módulo público baseado no cloud provider escolhido
+  {{- if eq (include "app.cloudProvider" .) "aws" }}
   module:
-    source: "app.terraform.io/{{ .Values.infrastructure.terraform.organization }}/storage/multicloud"
-    version: "1.0.0"
+    source: "terraform-aws-modules/s3-bucket/aws"
+    version: "~> 4.0"
+  {{- else if eq (include "app.cloudProvider" .) "azure" }}
+  module:
+    source: "Azure/avm-res-storage-storageaccount/azurerm"
+    version: "~> 0.1"
+  {{- end }}
 
-  terraformVariables:
-    # Identificação
-    - name: name
-      value: {{ include "app.fullname" . | quote }}
-      sensitive: false
-    - name: environment
-      value: {{ .Release.Namespace | quote }}
-      sensitive: false
+  # Destroy ao deletar o objeto Kubernetes
+  destroyOnDeletion: {{ .Values.infrastructure.terraform.destroyOnDeletion | default true }}
 
-    # Flavor abstrato (standard, premium, economy, archive)
-    # O módulo Terraform traduz para o recurso cloud apropriado
-    - name: flavor
-      value: {{ .Values.infrastructure.storage.flavor | quote }}
-      sensitive: false
-    - name: size
-      value: {{ .Values.infrastructure.storage.size | quote }}
-      sensitive: false
-
-    # Opções
-    - name: encryption
-      value: {{ .Values.infrastructure.storage.encryption | quote }}
-      sensitive: false
+  # Variáveis do Terraform baseadas no cloud provider
+  variables:
+    {{- if eq (include "app.cloudProvider" .) "aws" }}
+    #---------------------------------------------------------------------------
+    # AWS S3 Bucket Configuration
+    # Usando: https://github.com/terraform-aws-modules/terraform-aws-s3-bucket
+    #---------------------------------------------------------------------------
+    - name: bucket
+      value: {{ include "app.storageBucketName" . | quote }}
+      
+    - name: force_destroy
+      value: "{{ .Values.infrastructure.terraform.forceDestroy | default false }}"
+      
     - name: versioning
-      value: {{ .Values.infrastructure.storage.versioning | quote }}
-      sensitive: false
+      hcl: true
+      value: |
+        {
+          enabled = {{ .Values.infrastructure.storage.versioning }}
+        }
+    
+    - name: server_side_encryption_configuration
+      hcl: true
+      value: |
+        {
+          rule = {
+            apply_server_side_encryption_by_default = {
+              sse_algorithm = "AES256"
+            }
+          }
+        }
+    
+    {{- if .Values.infrastructure.storage.encryption }}
+    - name: kms_master_key_id
+      valueFrom:
+        secretKeyRef:
+          name: {{ .Values.infrastructure.terraform.kmsSecret | default "aws-kms-key" }}
+          key: key_id
+          optional: true
+    {{- end }}
+    
+    - name: tags
+      hcl: true
+      value: |
+        {
+          Name        = {{ include "app.fullname" . | quote }}
+          Environment = {{ .Release.Namespace | quote }}
+          Flavor      = {{ .Values.infrastructure.storage.flavor | quote }}
+          Team        = {{ .Values.app.team | default "platform" | quote }}
+          CostCenter  = {{ .Values.app.costCenter | default "platform" | quote }}
+          ManagedBy   = "hcp-terraform-operator"
+          AppName     = {{ .Values.app.name | quote }}
+          CloudProvider = "aws"
+        }
+    
+    # Lifecycle rules baseadas no flavor
+    {{- if eq .Values.infrastructure.storage.flavor "economy" }}
+    - name: lifecycle_rule
+      hcl: true
+      value: |
+        [
+          {
+            id      = "transition-to-ia"
+            enabled = true
+            transition = [
+              {
+                days          = 30
+                storage_class = "STANDARD_IA"
+              }
+            ]
+          }
+        ]
+    {{- else if eq .Values.infrastructure.storage.flavor "archive" }}
+    - name: lifecycle_rule
+      hcl: true
+      value: |
+        [
+          {
+            id      = "transition-to-glacier"
+            enabled = true
+            transition = [
+              {
+                days          = 7
+                storage_class = "GLACIER"
+              }
+            ]
+          }
+        ]
+    {{- end }}
+    
+    {{- else if eq (include "app.cloudProvider" .) "azure" }}
+    #---------------------------------------------------------------------------
+    # Azure Storage Account Configuration
+    # Usando: https://github.com/Azure/terraform-azurerm-avm-res-storage-storageaccount
+    #---------------------------------------------------------------------------
+    - name: name
+      value: {{ include "app.storageAccountName" . | quote }}
+    
+    - name: resource_group_name
+      valueFrom:
+        configMapKeyRef:
+          name: {{ .Values.infrastructure.azure.configMap | default "azure-platform-config" }}
+          key: resource_group_name
+    
+    - name: location
+      valueFrom:
+        configMapKeyRef:
+          name: {{ .Values.infrastructure.azure.configMap | default "azure-platform-config" }}
+          key: location
+    
+    - name: account_kind
+      value: "StorageV2"
+    
+    - name: account_tier
+      value: {{ include "app.azureAccountTier" . | quote }}
+    
+    - name: account_replication_type
+      value: {{ include "app.azureReplicationType" . | quote }}
+    
+    - name: enable_https_traffic_only
+      value: "true"
+    
+    {{- if .Values.infrastructure.storage.encryption }}
+    - name: infrastructure_encryption_enabled
+      value: "true"
+    {{- end }}
+    
+    - name: tags
+      hcl: true
+      value: |
+        {
+          Name        = {{ include "app.fullname" . | quote }}
+          Environment = {{ .Release.Namespace | quote }}
+          Flavor      = {{ .Values.infrastructure.storage.flavor | quote }}
+          Team        = {{ .Values.app.team | default "platform" | quote }}
+          CostCenter  = {{ .Values.app.costCenter | default "platform" | quote }}
+          ManagedBy   = "hcp-terraform-operator"
+          AppName     = {{ .Values.app.name | quote }}
+          CloudProvider = "azure"
+        }
+    {{- end }}
 
-    # Metadata
-    - name: owner
-      value: {{ .Values.app.team | quote }}
-      sensitive: false
-    - name: cost_center
-      value: {{ .Values.app.costCenter | default "default" | quote }}
-      sensitive: false
+  # Outputs que serão expostos como Secret no Kubernetes
+  outputs:
+    {{- if eq (include "app.cloudProvider" .) "aws" }}
+    - name: bucket_name
+      key: STORAGE_BUCKET_NAME
+    - name: bucket_arn
+      key: STORAGE_BUCKET_ARN
+    - name: bucket_region
+      key: STORAGE_BUCKET_REGION
+    - name: bucket_domain_name
+      key: STORAGE_BUCKET_DOMAIN
+    {{- else if eq (include "app.cloudProvider" .) "azure" }}
+    - name: storage_account_name
+      key: STORAGE_ACCOUNT_NAME
+    - name: storage_account_id
+      key: STORAGE_ACCOUNT_ID
+    - name: primary_blob_endpoint
+      key: STORAGE_BLOB_ENDPOINT
+    - name: primary_access_key
+      key: STORAGE_ACCESS_KEY
+      sensitive: true
+    {{- end }}
 
-  tags:
-    - platform-mvp
-    - storage
-    - {{ .Values.infrastructure.storage.flavor }}
-    - {{ .Release.Namespace }}
+  # Workspace configuration para organizacional policies e run tasks
+  workspace:
+    name: {{ include "app.fullname" . }}-storage-{{ .Release.Namespace }}
+    agentPoolId: {{ .Values.infrastructure.terraform.agentPoolId | quote }}
+    executionMode: {{ .Values.infrastructure.terraform.executionMode | default "remote" }}
+    terraformVersion: {{ .Values.infrastructure.terraform.version | default "1.7.0" }}
+    
+    # Tags para governance
+    tags:
+      - platform-managed
+      - storage
+      - {{ .Values.infrastructure.storage.flavor }}
+      - {{ include "app.cloudProvider" . }}
+      - {{ .Release.Namespace }}
+      - app:{{ .Values.app.name }}
+      - team:{{ .Values.app.team | default "platform" }}
+    
+    # Run triggers para ServiceNow integration
+    {{- if .Values.infrastructure.terraform.runTasks }}
+    runTasks:
+      {{- range .Values.infrastructure.terraform.runTasks }}
+      - name: {{ .name }}
+        url: {{ .url }}
+        {{- if .hmacKey }}
+        hmacKey: {{ .hmacKey }}
+        {{- end }}
+        stage: {{ .stage | default "post_plan" }}
+        enabled: {{ .enabled | default true }}
+      {{- end }}
+    {{- end }}
+
+  # Restartedaat para forçar reconciliação
+  restartedAt: {{ now | date "2006-01-02T15:04:05Z07:00" | quote }}
+---
+# ConfigMap com metadados do storage provisionado
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "app.fullname" . }}-storage-metadata
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+    platform.io/resource-type: storage-metadata
+data:
+  cloud-provider: {{ include "app.cloudProvider" . | quote }}
+  flavor: {{ .Values.infrastructure.storage.flavor | quote }}
+  encryption-enabled: {{ .Values.infrastructure.storage.encryption | quote }}
+  versioning-enabled: {{ .Values.infrastructure.storage.versioning | quote }}
+  provisioned-at: {{ now | date "2006-01-02T15:04:05Z07:00" | quote }}
+  terraform-workspace: {{ include "app.fullname" . }}-storage-{{ .Release.Namespace }}
+  hcp-organization: {{ .Values.infrastructure.terraform.organization }}
 {{- end }}

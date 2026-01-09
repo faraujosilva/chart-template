@@ -93,41 +93,63 @@ secrets:
 ################################################################################
 # Infrastructure Configuration (HCP Terraform Provisioning)
 #
-# O desenvolvedor escolhe o FLAVOR (capacidade/performance).
-# A plataforma decide automaticamente qual cloud provider usar.
+# SIMPLICIDADE TOTAL - Dev escolhe apenas FLAVOR
+# Platform Team decide cloud provider (AWS ou Azure)
 ################################################################################
 
 infrastructure:
   # Enable infrastructure provisioning
   enabled: false
-
-  # HCP Terraform settings (gerenciado pela plataforma)
-  terraform:
-    organization: plathub
-    version: "1.5.0"
+  
+  # HCP Terraform Organization
+  organization: plathub
+  
+  # Namespace do HCP Terraform Operator
+  namespace: terraform-system
+  
+  # Secret com token HCP Terraform
+  tokenSecret: hcp-terraform-token
+  
+  # Terraform version
+  terraformVersion: "1.7.0"
+  
+  # Execution mode
+  executionMode: remote
+  
+  # Cloud Provider - Gerenciado pelo Platform Team
+  # Options: aws, azure
+  cloudProvider: aws
+  
+  # AWS Configuration (quando cloudProvider=aws)
+  aws:
+    region: us-east-1
+  
+  # Azure Configuration (quando cloudProvider=azure)
+  azure:
+    location: eastus
+    resourceGroup: platform-resources
 
   #-----------------------------------------------------------------------------
-  # Storage Configuration
-  # Dev escolhe flavor, plataforma escolhe cloud (AWS/Azure)
+  # STORAGE - Developer Interface
+  # Dev escolhe apenas: flavor, size, encryption, versioning
   #-----------------------------------------------------------------------------
   storage:
     enabled: false
-
-    # Flavor de storage (abstração de capacidade/custo)
-    # Options:
-    #   - standard    : Acesso frequente, baixa latência (uso geral)
-    #   - premium     : Alta performance, IOPS garantido (databases, analytics)
-    #   - economy     : Acesso infrequente, menor custo (backups, logs)
-    #   - archive     : Armazenamento frio, custo mínimo (compliance, histórico)
+    
+    # Flavor Options:
+    #   standard - Acesso frequente, uso geral
+    #   premium  - Alta performance (databases)
+    #   economy  - Acesso infrequente (logs, backups)
+    #   archive  - Cold storage (compliance)
     flavor: standard
-
-    # Storage size
+    
+    # Size (não usado para provisioning, apenas documentação)
     size: 10Gi
-
-    # Enable encryption at rest
+    
+    # Encryption at rest
     encryption: true
-
-    # Enable versioning
+    
+    # Versioning
     versioning: false
 
   #-----------------------------------------------------------------------------
@@ -181,3 +203,45 @@ infrastructure:
 
     # High availability (replica)
     highAvailability: false
+
+  #-----------------------------------------------------------------------------
+  # Drift Detection Configuration
+  # Automated drift detection via scheduled plans
+  #-----------------------------------------------------------------------------
+  driftDetection:
+    # Enable drift detection
+    enabled: false
+    
+    # Cron schedule for drift checks
+    # Default: Every 1 hour
+    # Examples:
+    #   - "0 */1 * * *"   : Every hour
+    #   - "0 */6 * * *"   : Every 6 hours
+    #   - "0 9 * * *"     : Daily at 9 AM
+    #   - "0 9 * * 1"     : Weekly on Monday at 9 AM
+    schedule: "0 */1 * * *"
+    
+    # Container image for drift detector
+    # Must have: kubectl, curl, jq, bash
+    image: "bitnami/kubectl:1.28"
+    
+    # History limit for CronJob
+    historyLimit: 3
+    
+    # Notifications configuration
+    notifications:
+      enabled: false
+      
+      # Webhook URL para notificações (Slack, Teams, etc)
+      # Slack webhook format: https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+      # Teams webhook format: https://outlook.office.com/webhook/...
+      webhookUrl: ""
+      
+      # Notification channels
+      channels:
+        - slack
+        # - teams
+        # - email
+      
+      # Only notify on drift (não notifica quando está synced)
+      onlyOnDrift: true

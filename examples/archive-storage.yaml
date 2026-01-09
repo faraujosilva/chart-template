@@ -1,0 +1,34 @@
+# Archive Storage for Long-term Backup
+# Cost-optimized for infrequent access
+
+app:
+  name: backup-service
+  team: infrastructure-team
+  costCenter: CC-999
+
+image:
+  repository: myorg/backup-agent
+  tag: "v2.0.0"
+
+replicaCount: 1
+
+container:
+  port: 8080
+  env:
+    - name: BACKUP_SCHEDULE
+      value: "0 2 * * *"  # Daily at 2 AM
+
+service:
+  type: ClusterIP
+  port: 80
+
+# Archive storage - Platform escolhe Azure (50% mais barato!)
+infrastructure:
+  enabled: true
+  
+  storage:
+    enabled: true
+    flavor: archive      # ← Coldest, cheapest tier
+    size: 5000Gi         # 5TB for backups
+    encryption: true     # Always encrypt backups
+    versioning: true     # Keep backup versions

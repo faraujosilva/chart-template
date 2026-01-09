@@ -32,13 +32,36 @@ spec:
           env:
             {{- toYaml .Values.container.env | nindent 12 }}
           {{- end }}
-          {{- if .Values.configMap.enabled }}
+          {{- if and .Values.infrastructure.enabled .Values.infrastructure.storage.enabled }}
+            # Injeta STORAGE_ENDPOINT do ConfigMap gerado pelo HCP Terraform Operator
+            - name: STORAGE_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "app.fullname" . }}-storage-outputs
+                  key: STORAGE_ENDPOINT
+                  optional: true
+            - name: STORAGE_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "app.fullname" . }}-storage-outputs
+                  key: STORAGE_NAME
+                  optional: true
+            {{- if eq .Values.infrastructure.cloudProvider "azure" }}
+            # Azure Storage Access Key (sensível - vem do Secret)
+            - name: STORAGE_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "app.fullname" . }}-storage-outputs
+                  key: STORAGE_ACCESS_KEY
+                  optional: true
+            {{- end }}
+          {{- end }}
           envFrom:
+          {{- if .Values.configMap.enabled }}
             - configMapRef:
                 name: {{ include "app.fullname" . }}-config
           {{- end }}
           {{- if .Values.secrets.enabled }}
-          envFrom:
             - secretRef:
                 name: {{ .Values.secrets.name | default (printf "%s-secrets" (include "app.fullname" .)) }}
           {{- end }}

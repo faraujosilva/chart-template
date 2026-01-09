@@ -1,16 +1,31 @@
-# Simple application without infrastructure
-# helm install my-app ./charts/app -f examples/simple-app.yaml
+# Simple App with Storage
+# Dev interface - ZERO cloud knowledge required!
 
 app:
-  name: my-api
-  team: backend-team
+  name: simple-app
+  team: dev-team
+  costCenter: CC-001
 
 image:
   repository: nginx
-  tag: "1.25"
+  tag: "latest"
 
 replicaCount: 2
+
+container:
+  port: 80
 
 service:
   type: ClusterIP
   port: 80
+
+# Infrastructure - Just choose flavor!
+infrastructure:
+  enabled: true
+  
+  storage:
+    enabled: true
+    flavor: standard
+    size: 10Gi
+    encryption: true
+    versioning: false

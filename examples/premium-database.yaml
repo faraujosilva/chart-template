@@ -1,0 +1,44 @@
+# Premium Storage for High-Performance Database
+# Low latency, high IOPS
+
+app:
+  name: analytics-db
+  team: data-team
+  costCenter: CC-555
+
+image:
+  repository: myorg/timescaledb
+  tag: "latest-pg15"
+
+replicaCount: 3
+
+container:
+  port: 5432
+  env:
+    - name: POSTGRES_DB
+      value: "analytics"
+    - name: STORAGE_PATH
+      value: "/mnt/data"
+  
+  resources:
+    requests:
+      cpu: 2000m
+      memory: 4Gi
+    limits:
+      cpu: 4000m
+      memory: 8Gi
+
+service:
+  type: ClusterIP
+  port: 5432
+
+# Premium storage - High IOPS for database workloads
+infrastructure:
+  enabled: true
+  
+  storage:
+    enabled: true
+    flavor: premium      # ← Highest performance
+    size: 500Gi
+    encryption: true
+    versioning: false    # DB manages its own versioning
