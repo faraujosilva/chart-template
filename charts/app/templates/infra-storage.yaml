@@ -46,6 +46,7 @@ spec:
 apiVersion: app.terraform.io/v1alpha2
 kind: Module
 metadata:
+  name: s3-bucket
   namespace: terraform-operator-system
   labels:
     {{- include "app.labels" . | nindent 4 }}
@@ -62,7 +63,8 @@ spec:
       key: token
 
   module:
-    source: "terraform-aws-modules/s3-bucket/aws"
+    source: terraform-aws-modules/s3-bucket/aws
+    version: 5.10.0
   
   destroyOnDeletion: true
   
