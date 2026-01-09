@@ -16,6 +16,7 @@ apiVersion: app.terraform.io/v1alpha2
 kind: Workspace
 metadata:
   name: {{ include "app.fullname" . }}-storage
+  namespace: terraform-operator-system
   labels:
     {{- include "app.labels" . | nindent 4 }}
     platform.io/resource-type: storage
@@ -31,7 +32,6 @@ spec:
   
   token:
     secretKeyRef:
-      namespace: terraform-operator-system
       name: terraformcloud-credentials
       key: token
   
@@ -116,6 +116,7 @@ apiVersion: app.terraform.io/v1alpha2
 kind: Module
 metadata:
   name: {{ include "app.fullname" . }}-storage
+  namespace: terraform-operator-system
   labels:
     {{- include "app.labels" . | nindent 4 }}
     platform.io/resource-type: storage
@@ -127,7 +128,6 @@ spec:
   
   token:
     secretKeyRef:
-      namespace: terraform-operator-system
       name: terraformcloud-credentials
       key: token
   
