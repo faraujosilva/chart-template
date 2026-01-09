@@ -16,7 +16,6 @@ apiVersion: app.terraform.io/v1alpha2
 kind: Workspace
 metadata:
   name: {{ include "app.fullname" . }}-storage
-  namespace: {{ .Values.infrastructure.namespace | default "terraform-operator-system" }}
   labels:
     {{- include "app.labels" . | nindent 4 }}
     platform.io/resource-type: storage
@@ -26,7 +25,7 @@ metadata:
 spec:
   organization: {{ .Values.infrastructure.organization }}
   name: {{ include "app.fullname" . }}-storage
-  terraformVersion: {{ .Values.infrastructure.terraformVersion | default "1.7.0" | quote }}
+  terraformVersion: {{ .Values.infrastructure.terraformVersion | default "1.14.1" | quote }}
   applyMethod: auto
   allowDestroyPlan: true
   
@@ -116,7 +115,6 @@ apiVersion: app.terraform.io/v1alpha2
 kind: Module
 metadata:
   name: {{ include "app.fullname" . }}-storage
-  namespace: {{ .Values.infrastructure.namespace | default "terraform-operator-system" }}
   labels:
     {{- include "app.labels" . | nindent 4 }}
     platform.io/resource-type: storage
@@ -133,9 +131,9 @@ spec:
   
   module:
     source: "terraform-aws-modules/s3-bucket/aws"
-    version: "4.0.0"
+    version: "5.10.0"
   
-  destroyOnDeletion: true
+  deletionPolicy : destroy
   
   # Referencia as variáveis definidas no Workspace
   variables:
