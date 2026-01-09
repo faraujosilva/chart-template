@@ -224,6 +224,8 @@ spec:
     terraformVersion: {{ .Values.infrastructure.terraformVersion | default "1.7.0" }}
     executionMode: {{ .Values.infrastructure.executionMode | default "remote" }}
 {{- end }}
+{{- if and .Values.infrastructure.enabled .Values.infrastructure.storage.enabled }}
+---
 apiVersion: app.terraform.io/v1alpha2
 kind: Module
 metadata:
