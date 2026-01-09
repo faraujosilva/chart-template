@@ -159,5 +159,4 @@ spec:
   # Workspace configuration
   workspace:
     name: {{ include "app.fullname" . }}-storage
-    terraformVersion: {{ .Values.infrastructure.terraformVersion | default "1.14.1" }}
 {{- end }}
