@@ -1,0 +1,24 @@
+apiVersion: v2
+name: app
+description: |
+  Platform MVP - Infrastructure-Aware Application Chart
+  Deploy your application with optional cloud infrastructure provisioning.
+  Supports multi-cloud storage, databases, and caching via HCP Terraform.
+
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+
+keywords:
+  - application
+  - infrastructure
+  - multicloud
+  - platform
+
+maintainers:
+  - name: Platform Team
+    email: platform@company.com
+
+annotations:
+  platform.io/infra-aware: "true"
+  platform.io/supported-infra: "storage,database,cache"

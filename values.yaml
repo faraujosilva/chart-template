@@ -1,0 +1,183 @@
+################################################################################
+# Application Configuration
+################################################################################
+
+# Application metadata
+app:
+  name: ""  # Required: application name
+  team: ""  # Required: team owner
+  costCenter: ""
+
+# Container image
+image:
+  repository: nginx
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+# Replicas and scaling
+replicaCount: 2
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+
+# Container configuration
+container:
+  port: 80
+
+  # Environment variables
+  env: []
+  # - name: DATABASE_URL
+  #   value: "postgres://..."
+  # - name: STORAGE_BUCKET
+  #   valueFrom:
+  #     secretKeyRef:
+  #       name: app-secrets
+  #       key: bucket-name
+
+  # Resource limits
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+  # Health checks
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 30
+    periodSeconds: 10
+
+  readinessProbe:
+    httpGet:
+      path: /ready
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 5
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 80
+
+# Ingress configuration
+ingress:
+  enabled: false
+  className: alb
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+  hosts:
+    - host: app.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# ConfigMap data
+configMap:
+  enabled: false
+  data: {}
+
+# Secrets (reference only - create separately)
+secrets:
+  enabled: false
+  name: ""
+
+################################################################################
+# Infrastructure Configuration (HCP Terraform Provisioning)
+#
+# O desenvolvedor escolhe o FLAVOR (capacidade/performance).
+# A plataforma decide automaticamente qual cloud provider usar.
+################################################################################
+
+infrastructure:
+  # Enable infrastructure provisioning
+  enabled: false
+
+  # HCP Terraform settings (gerenciado pela plataforma)
+  terraform:
+    organization: plathub
+    version: "1.5.0"
+
+  #-----------------------------------------------------------------------------
+  # Storage Configuration
+  # Dev escolhe flavor, plataforma escolhe cloud (AWS/Azure)
+  #-----------------------------------------------------------------------------
+  storage:
+    enabled: false
+
+    # Flavor de storage (abstração de capacidade/custo)
+    # Options:
+    #   - standard    : Acesso frequente, baixa latência (uso geral)
+    #   - premium     : Alta performance, IOPS garantido (databases, analytics)
+    #   - economy     : Acesso infrequente, menor custo (backups, logs)
+    #   - archive     : Armazenamento frio, custo mínimo (compliance, histórico)
+    flavor: standard
+
+    # Storage size
+    size: 10Gi
+
+    # Enable encryption at rest
+    encryption: true
+
+    # Enable versioning
+    versioning: false
+
+  #-----------------------------------------------------------------------------
+  # Database Configuration
+  # Dev escolhe engine + flavor de capacidade
+  #-----------------------------------------------------------------------------
+  database:
+    enabled: false
+
+    # Tipo de database
+    # Options: postgres, mysql
+    engine: postgres
+
+    # Flavor de capacidade
+    # Options:
+    #   - small       : Dev/testes (2 vCPU, 4GB RAM)
+    #   - medium      : Produção leve (4 vCPU, 8GB RAM)
+    #   - large       : Produção (8 vCPU, 32GB RAM)
+    #   - xlarge      : Alta demanda (16 vCPU, 64GB RAM)
+    flavor: small
+
+    # Database version
+    version: "15"
+
+    # Storage size in GB
+    storageSize: 20
+
+    # High availability (replica em outra AZ)
+    highAvailability: false
+
+    # Backup retention in days
+    backupRetentionDays: 7
+
+  #-----------------------------------------------------------------------------
+  # Cache Configuration
+  # Para sessões, cache de queries, rate limiting
+  #-----------------------------------------------------------------------------
+  cache:
+    enabled: false
+
+    # Tipo de cache
+    # Options: redis, memcached
+    engine: redis
+
+    # Flavor de capacidade
+    # Options:
+    #   - small       : 1.5GB RAM (dev, cache básico)
+    #   - medium      : 6GB RAM (produção)
+    #   - large       : 13GB RAM (alta demanda)
+    flavor: small
+
+    # High availability (replica)
+    highAvailability: false

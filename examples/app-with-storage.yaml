@@ -1,0 +1,39 @@
+# Application with storage provisioning
+# Dev não precisa saber se é AWS ou Azure - escolhe o flavor!
+#
+# helm install my-app ./charts/app -f examples/app-with-storage.yaml -n dev
+
+app:
+  name: media-service
+  team: media-team
+  costCenter: CC-12345
+
+image:
+  repository: my-registry/media-service
+  tag: "v1.2.0"
+
+replicaCount: 3
+
+container:
+  port: 8080
+  env:
+    - name: STORAGE_ENDPOINT
+      valueFrom:
+        secretKeyRef:
+          name: media-service-storage
+          key: endpoint
+
+service:
+  type: ClusterIP
+  port: 80
+
+# Enable infrastructure provisioning
+infrastructure:
+  enabled: true
+
+  storage:
+    enabled: true
+    flavor: standard      # standard, premium, economy, archive
+    size: 50Gi
+    encryption: true
+    versioning: true

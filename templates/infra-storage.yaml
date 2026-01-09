@@ -1,0 +1,71 @@
+{{- if and .Values.infrastructure.enabled .Values.infrastructure.storage.enabled }}
+apiVersion: app.terraform.io/v1alpha2
+kind: Workspace
+metadata:
+  name: {{ include "app.fullname" . }}-storage
+  namespace: terraform-operator-system
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+    platform.io/resource-type: storage
+    platform.io/app: {{ include "app.fullname" . }}
+    platform.io/flavor: {{ .Values.infrastructure.storage.flavor }}
+  annotations:
+    platform.io/provisioned-by: helm-chart
+    platform.io/drift-check: enabled
+spec:
+  organization: {{ .Values.infrastructure.terraform.organization }}
+  name: {{ include "app.workspaceName" . }}-storage
+  terraformVersion: {{ .Values.infrastructure.terraform.version | quote }}
+  executionMode: remote
+  applyMethod: auto
+
+  token:
+    secretKeyRef:
+      name: terraformcloud-credentials
+      key: token
+
+  # Module source - multi-cloud storage (plataforma decide AWS/Azure)
+  module:
+    source: "app.terraform.io/{{ .Values.infrastructure.terraform.organization }}/storage/multicloud"
+    version: "1.0.0"
+
+  terraformVariables:
+    # Identificação
+    - name: name
+      value: {{ include "app.fullname" . | quote }}
+      sensitive: false
+    - name: environment
+      value: {{ .Release.Namespace | quote }}
+      sensitive: false
+
+    # Flavor abstrato (standard, premium, economy, archive)
+    # O módulo Terraform traduz para o recurso cloud apropriado
+    - name: flavor
+      value: {{ .Values.infrastructure.storage.flavor | quote }}
+      sensitive: false
+    - name: size
+      value: {{ .Values.infrastructure.storage.size | quote }}
+      sensitive: false
+
+    # Opções
+    - name: encryption
+      value: {{ .Values.infrastructure.storage.encryption | quote }}
+      sensitive: false
+    - name: versioning
+      value: {{ .Values.infrastructure.storage.versioning | quote }}
+      sensitive: false
+
+    # Metadata
+    - name: owner
+      value: {{ .Values.app.team | quote }}
+      sensitive: false
+    - name: cost_center
+      value: {{ .Values.app.costCenter | default "default" | quote }}
+      sensitive: false
+
+  tags:
+    - platform-mvp
+    - storage
+    - {{ .Values.infrastructure.storage.flavor }}
+    - {{ .Release.Namespace }}
+{{- end }}

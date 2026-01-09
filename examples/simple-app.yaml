@@ -1,0 +1,16 @@
+# Simple application without infrastructure
+# helm install my-app ./charts/app -f examples/simple-app.yaml
+
+app:
+  name: my-api
+  team: backend-team
+
+image:
+  repository: nginx
+  tag: "1.25"
+
+replicaCount: 2
+
+service:
+  type: ClusterIP
+  port: 80
