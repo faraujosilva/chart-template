@@ -29,7 +29,7 @@ metadata:
 spec:
   organization: plathub
   name: {{ include "app.workspaceName" . }}-storage
-  terraformVersion: {{ .Values.infrastructure.terraform.version | quote }}
+  terraformVersion: 1.14.1
   applyMethod: auto
   deletionPolicy: destroy
   token:
