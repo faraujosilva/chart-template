@@ -198,6 +198,7 @@ Calculate estimated monthly cost (USD)
     {{- $costPerGB = .Values.infrastructure.costMatrix.azure.archive }}
   {{- end }}
 {{- end }}
+{{- end }}
 
 {{/*
 Parse storage flavor to get cloud provider (LEGACY - mantido para compatibilidade)
