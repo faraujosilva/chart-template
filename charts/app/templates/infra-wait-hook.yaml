@@ -59,8 +59,8 @@ spec:
                 echo ""
                 echo "📡 Tentativa $i/$MAX_ATTEMPTS - Verificando Module status..."
                 
-                # Obtém o status do Module
-                STATUS=$(kubectl get module $MODULE_NAME -n $NAMESPACE -o jsonpath='{.status.runStatus}' 2>/dev/null || echo "NotFound")
+                # Obtém o status do Module (campo correto: .status.run.status)
+                STATUS=$(kubectl get module $MODULE_NAME -n $NAMESPACE -o jsonpath='{.status.run.status}' 2>/dev/null || echo "NotFound")
                 
                 echo "   Status atual: $STATUS"
                 
